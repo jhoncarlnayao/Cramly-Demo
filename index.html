@@ -15,6 +15,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Plus Jakarta Sans'
 #viewport.pan-cursor{cursor:grab}
 #viewport.pan-cursor.panning{cursor:grabbing}
 #world{position:absolute;width:8000px;height:6000px;top:-2000px;left:-2000px;transform-origin:2000px 2000px;background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:28px 28px}
+/* ── DRAW CANVAS: now INSIDE #world so it moves/scales with camera ── */
+#drawCanvas{position:absolute;left:0;top:0;width:8000px;height:8000px;z-index:5;pointer-events:none}
 .cel{position:absolute;cursor:grab;user-select:none;transition:box-shadow .15s}
 .cel.dragging{cursor:grabbing;opacity:.88;z-index:9999!important}
 .cel.selected{outline:2px solid #3b82f6;outline-offset:2px;border-radius:2px}
@@ -292,7 +294,6 @@ body.dark .flip-face.front{background:#222}
 body.dark .quiz-q{background:#222;color:#f0f0f0}
 body.dark .nav-btn{background:#222;color:#f0f0f0}
 body.dark .dp-card-title{color:#f0f0f0}
-#drawCanvas{position:absolute;inset:0;z-index:5;pointer-events:none}
 #undoRedo{position:fixed;top:14px;right:14px;display:flex;gap:4px;z-index:600}
 .ur-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:#555;transition:all .15s;box-shadow:0 2px 8px rgba(0,0,0,.07)}
 .ur-btn:hover{background:#f0f0f0;color:#111}
@@ -301,12 +302,15 @@ body.dark .dp-card-title{color:#f0f0f0}
 #snapIndicator.show{opacity:1}
 #viewport.lasso-mode{cursor:crosshair}
 .multi-selected{outline:2px solid #f59e0b!important;outline-offset:2px!important}
+/* Draw mode cursor */
+#viewport.draw-active{cursor:crosshair}
 </style>
 </head>
 <body>
 <div id="viewport">
-  <canvas id="drawCanvas"></canvas>
   <div id="world">
+    <!-- ✅ FIX: drawCanvas is INSIDE #world so it moves/scales with the camera -->
+    <canvas id="drawCanvas" width="8000" height="8000"></canvas>
     <div id="groupSelect"></div>
     <svg id="connSVG" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -353,6 +357,17 @@ body.dark .dp-card-title{color:#f0f0f0}
 
 <!-- ═══ MORE PANEL FLYOUT ═══ -->
 <div id="morePanel" class="hidden">
+	<button class="sd-btn" onclick="shareCanvas();closeMorePanel()" 
+  data-tip="Share canvas">
+  <svg width="15" height="15" viewBox="0 0 24 24" 
+    fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="18" cy="5" r="3"/>
+    <circle cx="6" cy="12" r="3"/>
+    <circle cx="18" cy="19" r="3"/>
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+  </svg>
+</button>
   <button class="sd-btn" onclick="dropCat();closeMorePanel()" data-tip="Drop a cat (C)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path d="M16 2l2 4-2 2M8 2L6 6l2 2"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M9.5 17a3 3 0 005 0"/></svg></button>
   <button class="sd-btn" onclick="openOv('memeModal');loadMemeCat();closeMorePanel()" data-tip="Meme it (M)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
   <button class="sd-btn" id="stickerBtn" onclick="toggleStickerPanel(event)" data-tip="Stickers (K)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 0110 10c0 5.52-4.48 10-10 10A10 10 0 012 12 10 10 0 0112 2"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg></button>
@@ -395,6 +410,7 @@ body.dark .dp-card-title{color:#f0f0f0}
     <div class="draw-swatch" style="background:#fff;border:1px solid #ddd" data-dc="#fff" onclick="pickDrawColor(this)"></div>
     <input type="range" id="drawSizeSlider" min="1" max="30" value="2" oninput="drawSize=parseInt(this.value);document.getElementById('drawSizeLbl').textContent=drawSize+'px'"/>
     <span id="drawSizeLbl" style="font-size:10px;color:#555;min-width:26px">2px</span>
+    <button onclick="undoDrawStroke()" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;color:#555" title="Undo last stroke (Ctrl+Z)">↩ Undo</button>
     <button onclick="clearDrawing()" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;color:#555">Clear</button>
     <div class="tb-sep"></div>
   </div>
@@ -482,6 +498,7 @@ body.dark .dp-card-title{color:#f0f0f0}
   <div class="kb-row"><span class="kb-d">Flowchart</span><div class="kb-keys"><span class="kbd">F</span></div></div>
   <div class="kb-row"><span class="kb-d">Connect</span><div class="kb-keys"><span class="kbd">A</span></div></div>
   <div class="kb-row"><span class="kb-d">Draw</span><div class="kb-keys"><span class="kbd">P</span></div></div>
+  <div class="kb-row"><span class="kb-d">Draw undo stroke</span><div class="kb-keys"><span class="kbd">Ctrl+Z</span></div></div>
   <div class="kb-row"><span class="kb-d">Lasso select</span><div class="kb-keys"><span class="kbd">L</span></div></div>
   <div class="kb-row"><span class="kb-d">Group selected</span><div class="kb-keys"><span class="kbd">G</span></div></div>
   <div class="kb-row"><span class="kb-d">Search</span><div class="kb-keys"><span class="kbd">/</span></div></div>
@@ -653,6 +670,7 @@ body.dark .dp-card-title{color:#f0f0f0}
 'use strict';
 const world=document.getElementById('world');
 const viewport=document.getElementById('viewport');
+// ✅ FIX: drawCanvas is now inside #world — grab it from there
 const drawCanvas=document.getElementById('drawCanvas');
 const ctx=drawCanvas.getContext('2d');
 
@@ -670,12 +688,73 @@ let groups=[],groupCtr=0;
 let multiSelected=[],lassoMode=false,lassoStart=null;
 let history=[],historyIdx=-1,historyPaused=false;
 
+// ✅ NEW: Drawing stroke history for per-stroke undo
+let drawStrokes=[];       // array of stroke objects {color, size, points:[{x,y}]}
+let currentStroke=null;   // stroke being drawn right now
+
 const noteColors={yellow:'#fef9c3',lav:'#ede9fe',green:'#d1fae5',peach:'#ffedd5',pink:'#fce7f3',sky:'#e0f2fe'};
 const EMOJIS=['📚','🧮','🔬','🌍','💡','🎯','📐','🧬','📖','🎓','🧪','🗺️','⚗️','🔭','💻'];
 const catFacts=['Cats sleep 12–16 hrs/day 😴','A group of cats = a clowder 🐾','Cats can jump 6x their height 🦘','Cats purr at 25–150 Hz — it heals! 💊'];
 const ELEMENT_COLORS=['#f0f0f0','#fde68a','#93c5fd','#86efac','#f9a8d4','#c4b5fd','#fca5a5','#6ee7b7','#fff'];
 let selEmoji=EMOJIS[0];
 const GEMINI_KEY='AIzaSyBelgw8NVH-lKg5sMCqJbqMIx4hEdyFudk';
+
+
+
+function shareCanvas() {
+  const state = {
+    decks: JSON.parse(JSON.stringify(decks)),
+    bookmarks,
+    drawStrokes,
+    cam,
+    darkMode
+  };
+  const encoded = btoa(
+    unescape(encodeURIComponent(JSON.stringify(state)))
+  );
+  const url = location.href.split('?')[0] + '?share=' + encoded;
+  navigator.clipboard.writeText(url).then(() =>
+    showToast('Share link copied!')
+  ).catch(() => {
+    prompt('Copy this link:', url);
+  });
+}
+
+function loadShareParam() {
+  const params = new URLSearchParams(location.search);
+  const share = params.get('share');
+  if (!share) return;
+  try {
+    const state = JSON.parse(
+      decodeURIComponent(escape(atob(share)))
+    );
+    if (state.decks) {
+      decks = state.decks;
+      decks.forEach(deck => placeDeckOnCanvas(deck));
+    }
+    if (state.bookmarks) {
+      bookmarks = state.bookmarks;
+      renderBookmarkBar();
+    }
+    if (state.drawStrokes) {
+      drawStrokes = state.drawStrokes;
+      replayStrokes();
+    }
+    if (state.darkMode) toggleDark();
+    updateStats();
+    showToast('Canvas loaded from shared link!');
+  } catch(e) {
+    showToast('Could not load shared canvas');
+  }
+}
+
+
+
+
+
+
+
+
 
 /* ══ MORE PANEL ══ */
 function toggleMorePanel(e){
@@ -770,12 +849,12 @@ function makeGroupDraggable(gWrap,elIds){
 function ungroupById(id){const g=groups.find(x=>x.id===id);if(!g)return;g.wrap.remove();groups=groups.filter(x=>x.id!==id);updateStats();captureState();showToast('Ungrouped')}
 
 /* ══ LASSO SELECT ══ */
-let lassoEl=null,lassoStart2=null;
+let lassoEl=null;
 viewport.addEventListener('mousedown',e=>{
   if(!lassoMode)return;
   if(e.target.closest('.cel')||e.target.closest('.group-wrap'))return;
   clearMultiSelect();
-  const wpos=screenToWorld(e.clientX,e.clientY);lassoStart=wpos;lassoStart2=wpos;
+  const wpos=screenToWorld(e.clientX,e.clientY);lassoStart=wpos;
   const gs=document.getElementById('groupSelect');gs.style.display='block';gs.style.left=wpos.x+'px';gs.style.top=wpos.y+'px';gs.style.width='0px';gs.style.height='0px';lassoEl=gs;e.preventDefault();
 });
 document.addEventListener('mousemove',e=>{
@@ -789,15 +868,100 @@ document.addEventListener('mouseup',e=>{
   if(lassoEl)lassoEl.style.display='none';lassoStart=null;lassoEl=null;
 });
 
-/* ══ CANVAS / DRAW ══ */
-function resizeCanvas(){drawCanvas.width=viewport.clientWidth;drawCanvas.height=viewport.clientHeight}
-window.addEventListener('resize',resizeCanvas);resizeCanvas();
-function toggleDrawMode(){drawMode=!drawMode;document.getElementById('drawBtn').classList.toggle('active',drawMode);drawCanvas.style.pointerEvents=drawMode?'auto':'none';document.getElementById('drawColorRow').classList.toggle('visible',drawMode)}
-function pickDrawColor(el){document.querySelectorAll('.draw-swatch').forEach(s=>s.classList.remove('on'));el.classList.add('on');drawColor=el.dataset.dc}
-function clearDrawing(){ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);showToast('Drawing cleared')}
-drawCanvas.addEventListener('mousedown',e=>{if(!drawMode)return;drawing=true;const r=drawCanvas.getBoundingClientRect();lastPt={x:e.clientX-r.left,y:e.clientY-r.top}});
-drawCanvas.addEventListener('mousemove',e=>{if(!drawing||!drawMode)return;const r=drawCanvas.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;ctx.globalAlpha=1;ctx.strokeStyle=drawColor;ctx.lineWidth=drawSize;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(lastPt.x,lastPt.y);ctx.lineTo(x,y);ctx.stroke();lastPt={x,y}});
-window.addEventListener('mouseup',()=>{drawing=false;lastPt=null});
+/* ══════════════════════════════════════════════
+   DRAWING — FIXED
+   Canvas is inside #world, so it moves/zooms
+   with the camera automatically.
+   We draw at WORLD coordinates (no cam math needed).
+   Per-stroke undo via drawStrokes[] history.
+══════════════════════════════════════════════ */
+function toggleDrawMode(){
+  drawMode=!drawMode;
+  document.getElementById('drawBtn').classList.toggle('active',drawMode);
+  // ✅ pointer-events on the canvas (inside world) — enable/disable
+  drawCanvas.style.pointerEvents=drawMode?'auto':'none';
+  document.getElementById('drawColorRow').classList.toggle('visible',drawMode);
+  viewport.classList.toggle('draw-active',drawMode);
+}
+
+function pickDrawColor(el){
+  document.querySelectorAll('.draw-swatch').forEach(s=>s.classList.remove('on'));
+  el.classList.add('on');
+  drawColor=el.dataset.dc;
+}
+
+// ✅ Redraw all strokes from history onto the canvas
+function replayStrokes(){
+  ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  drawStrokes.forEach(stroke=>{
+    if(!stroke.points||stroke.points.length<2)return;
+    ctx.globalAlpha=1;
+    ctx.strokeStyle=stroke.color;
+    ctx.lineWidth=stroke.size;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    ctx.beginPath();
+    ctx.moveTo(stroke.points[0].x,stroke.points[0].y);
+    for(let i=1;i<stroke.points.length;i++){
+      ctx.lineTo(stroke.points[i].x,stroke.points[i].y);
+    }
+    ctx.stroke();
+  });
+}
+
+// ✅ Undo last drawing stroke
+function undoDrawStroke(){
+  if(drawStrokes.length===0){showToast('Nothing to undo');return}
+  drawStrokes.pop();
+  replayStrokes();
+  showToast('Draw stroke undone');
+}
+
+function clearDrawing(){
+  ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  drawStrokes=[];
+  showToast('Drawing cleared');
+}
+
+// ✅ FIXED: mouse coords -> world coords by reading canvas position in world
+// Since canvas is at (0,0) in world space and is 8000x8000, a mousedown on
+// the canvas gives clientX/Y. We convert to world using screenToWorld().
+drawCanvas.addEventListener('mousedown',e=>{
+  if(!drawMode)return;
+  drawing=true;
+  const wpos=screenToWorld(e.clientX,e.clientY);
+  lastPt=wpos;
+  // Start a new stroke
+  currentStroke={color:drawColor,size:drawSize,points:[{x:wpos.x,y:wpos.y}]};
+  e.stopPropagation();
+});
+
+drawCanvas.addEventListener('mousemove',e=>{
+  if(!drawing||!drawMode)return;
+  const wpos=screenToWorld(e.clientX,e.clientY);
+  // Draw incrementally
+  ctx.globalAlpha=1;
+  ctx.strokeStyle=drawColor;
+  ctx.lineWidth=drawSize;
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  ctx.beginPath();
+  ctx.moveTo(lastPt.x,lastPt.y);
+  ctx.lineTo(wpos.x,wpos.y);
+  ctx.stroke();
+  lastPt=wpos;
+  // Record point in current stroke
+  if(currentStroke)currentStroke.points.push({x:wpos.x,y:wpos.y});
+});
+
+window.addEventListener('mouseup',()=>{
+  if(drawing&&currentStroke&&currentStroke.points.length>1){
+    drawStrokes.push(currentStroke);
+  }
+  drawing=false;
+  lastPt=null;
+  currentStroke=null;
+});
 
 /* ══ CAMERA ══ */
 function applyCamera(){world.style.transform=`translate(${cam.x}px,${cam.y}px) scale(${cam.zoom})`;world.style.transformOrigin='2000px 2000px';document.getElementById('zoomLbl').textContent=Math.round(cam.zoom*100)+'%';redrawConnections();updateMinimap()}
@@ -821,7 +985,7 @@ function randWorldPos(){const r=viewport.getBoundingClientRect();const cx=r.left
 const SNAP=28;
 function snapXY(x,y){if(!snapMode)return{x,y};return{x:Math.round(x/SNAP)*SNAP,y:Math.round(y/SNAP)*SNAP}}
 
-/* ══ UNDO / REDO ══ */
+/* ══ UNDO / REDO (element history) ══ */
 function captureState(){
   if(historyPaused)return;
   const els=[];document.querySelectorAll('.cel').forEach(el=>{els.push({id:el.dataset.elId,left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,zIndex:el.style.zIndex,html:el.outerHTML})});
@@ -923,24 +1087,15 @@ function importCSV(input){const file=input.files[0];if(!file)return;const d=deck
 function exportDecks(){const data=JSON.stringify({decks},null,2);const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(data);a.download='cramly-decks.json';a.click();showToast('Decks exported!')}
 function importDecks(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.decks){d.decks.forEach(deck=>decks.push(deck));renderDeckPanel();updateStats();saveLSState();showToast(`Imported ${d.decks.length} decks!`)}}catch{showToast('Import failed')}};r.readAsText(file);input.value=''}
 
-/* ══════════════════════════════════════════════
-   AI GENERATE — FIXED JSON PARSING
-   The Gemini response can contain markdown fences,
-   extra whitespace, or trailing text. We:
-   1. Strip markdown code fences
-   2. Extract just the JSON array with a regex
-   3. Fall back to local generation on any error
-══════════════════════════════════════════════ */
+/* ══ JSON EXTRACT HELPER ══ */
 function extractJsonArray(text){
-  // Remove markdown fences
   text=text.replace(/```(?:json)?/gi,'').replace(/```/g,'').trim();
-  // Find first [ ... ] block
-  const start=text.indexOf('[');
-  const end=text.lastIndexOf(']');
+  const start=text.indexOf('[');const end=text.lastIndexOf(']');
   if(start===-1||end===-1||end<=start)throw new Error('No JSON array found');
   return text.slice(start,end+1);
 }
 
+/* ══ AI GENERATE CARDS ══ */
 async function aiGenerateCards(){
   const d=decks.find(x=>x.id===activeDeckId);if(!d)return;
   const btn=document.getElementById('aiGenBtn'),status=document.getElementById('aiStatus');
@@ -963,7 +1118,6 @@ async function aiGenerateCards(){
   }catch(err){
     console.error('AI Generate error:',err);
     status.textContent='⚠️ AI unavailable, generating locally…';
-    // Fallback: generate sample cards from deck title/tag
     const fallbackCards=genFallbackCards(d,5);
     fallbackCards.forEach(c=>d.cards.push({front:c.front,back:c.back,srs:0}));
     renderCardList();renderDeckPanel();updateDeckCard(activeDeckId);updateStats();saveLSState();
@@ -1085,56 +1239,22 @@ function updateMinimap(){if(minimapRaf)return;minimapRaf=requestAnimationFrame(d
 function drawMinimap(){minimapRaf=null;const mc=document.getElementById('minimapCanvas'),mctx=mc.getContext('2d');mctx.clearRect(0,0,160,100);mctx.fillStyle='#f5f5f5';mctx.fillRect(0,0,160,100);const SCALE=160/8000;document.querySelectorAll('.cel').forEach(el=>{const wx=parseFloat(el.style.left)+2000,wy=parseFloat(el.style.top)+2000,mw=el.offsetWidth*SCALE,mh=el.offsetHeight*SCALE;mctx.fillStyle='#3b82f6';mctx.globalAlpha=0.5;mctx.fillRect(wx*SCALE,wy*(100/6000),Math.max(2,mw),Math.max(2,mh))});mctx.globalAlpha=1;const r=viewport.getBoundingClientRect(),vx=(-cam.x/cam.zoom+2000)*SCALE,vy=(-cam.y/cam.zoom+2000)*(100/6000),vw=(r.width/cam.zoom)*SCALE,vh=(r.height/cam.zoom)*(100/6000),mv=document.getElementById('minimapViewport');mv.style.left=Math.max(0,vx)+'px';mv.style.top=Math.max(0,vy)+'px';mv.style.width=Math.min(160,vw)+'px';mv.style.height=Math.min(100,vh)+'px'}
 function minimapClick(e){const r=document.getElementById('minimap').getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,wx=(mx/160)*8000-2000,wy=(my/100)*6000-2000,vr=viewport.getBoundingClientRect();cam.x=vr.width/2-wx*cam.zoom;cam.y=vr.height/2-wy*cam.zoom;applyCamera()}
 
-/* ══════════════════════════════════════════════
-   AUTO LAYOUT — FIXED: respects groups
-   Groups are treated as a single unit.
-   Ungrouped elements fill remaining slots.
-══════════════════════════════════════════════ */
+/* ══ AUTO LAYOUT ══ */
 function autoLayout(){
   const gapX=280,gapY=260,startX=2100,startY=2100;
-  const pad=20;
   let col=0,row=0;
-  const cols=4; // max columns
-
-  // Collect grouped element IDs so we skip them individually
+  const cols=4;
   const groupedElIds=new Set();
   groups.forEach(g=>g.elIds.forEach(id=>groupedElIds.add(id)));
-
-  // Layout groups first
   groups.forEach(g=>{
-    // Compute current bounding box of the group's children
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    g.elIds.forEach(id=>{
-      const el=document.querySelector(`.cel[data-el-id="${id}"]`);
-      if(!el)return;
-      const ex=parseFloat(el.style.left),ey=parseFloat(el.style.top),ew=el.offsetWidth,eh=el.offsetHeight;
-      if(ex<minX)minX=ex;if(ey<minY)minY=ey;if(ex+ew>maxX)maxX=ex+ew;if(ey+eh>maxY)maxY=ey+eh;
-    });
-    const bw=maxX-minX,bh=maxY-minY;
-    const targetX=startX+col*(gapX);
-    const targetY=startY+row*(gapY);
-    const dx=targetX-minX,dy=targetY-minY;
-    // Move all child elements
-    g.elIds.forEach(id=>{
-      const el=document.querySelector(`.cel[data-el-id="${id}"]`);
-      if(!el)return;
-      el.style.left=(parseFloat(el.style.left)+dx)+'px';
-      el.style.top=(parseFloat(el.style.top)+dy)+'px';
-    });
-    // Move group wrapper
-    g.wrap.style.left=(parseFloat(g.wrap.style.left)+dx)+'px';
-    g.wrap.style.top=(parseFloat(g.wrap.style.top)+dy)+'px';
+    g.elIds.forEach(id=>{const el=document.querySelector(`.cel[data-el-id="${id}"]`);if(!el)return;const ex=parseFloat(el.style.left),ey=parseFloat(el.style.top),ew=el.offsetWidth,eh=el.offsetHeight;if(ex<minX)minX=ex;if(ey<minY)minY=ey;if(ex+ew>maxX)maxX=ex+ew;if(ey+eh>maxY)maxY=ey+eh});
+    const targetX=startX+col*(gapX),targetY=startY+row*(gapY),dx=targetX-minX,dy=targetY-minY;
+    g.elIds.forEach(id=>{const el=document.querySelector(`.cel[data-el-id="${id}"]`);if(!el)return;el.style.left=(parseFloat(el.style.left)+dx)+'px';el.style.top=(parseFloat(el.style.top)+dy)+'px'});
+    g.wrap.style.left=(parseFloat(g.wrap.style.left)+dx)+'px';g.wrap.style.top=(parseFloat(g.wrap.style.top)+dy)+'px';
     col++;if(col>=cols){col=0;row++}
   });
-
-  // Layout ungrouped elements
-  document.querySelectorAll('.cel').forEach(el=>{
-    if(groupedElIds.has(el.dataset.elId))return;
-    el.style.left=(startX+col*gapX)+'px';
-    el.style.top=(startY+row*gapY)+'px';
-    col++;if(col>=cols){col=0;row++}
-  });
-
+  document.querySelectorAll('.cel').forEach(el=>{if(groupedElIds.has(el.dataset.elId))return;el.style.left=(startX+col*gapX)+'px';el.style.top=(startY+row*gapY)+'px';col++;if(col>=cols){col=0;row++}});
   redrawConnections();updateMinimap();captureState();showToast('Elements auto-arranged!')
 }
 
@@ -1161,7 +1281,12 @@ document.addEventListener('keydown',e=>{
   const a=document.activeElement,typing=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.contentEditable==='true');
   const cmd=e.metaKey||e.ctrlKey;
   if(e.key==='Escape'){['deckModal','noteModal','studyModal','memeModal','cardModal','quizModal'].forEach(closeOv);closeSearch();document.getElementById('deckPanel').classList.remove('open');document.getElementById('kbPanel').classList.remove('open');kbOpen=false;document.getElementById('shapePicker').classList.remove('open');document.getElementById('stickerPanel').classList.remove('open');document.getElementById('flowPanel').classList.remove('open');closeMorePanel();if(connectMode)toggleConnectMode();if(lassoMode)toggleLasso();if(selectedEl){selectedEl.classList.remove('selected');selectedEl=null}clearMultiSelect();return}
-  if(cmd&&e.key==='z'){e.preventDefault();undo();return}
+  // ✅ Ctrl+Z: if draw mode, undo a drawing stroke; else undo element history
+  if(cmd&&e.key==='z'){
+    e.preventDefault();
+    if(drawMode){undoDrawStroke()}else{undo()}
+    return;
+  }
   if(cmd&&(e.key==='y'||e.key==='Z')){e.preventDefault();redo();return}
   if(cmd&&e.key==='d'){e.preventDefault();openOv('deckModal');return}
   if(cmd&&e.key==='n'){e.preventDefault();openOv('noteModal');return}
@@ -1195,6 +1320,7 @@ document.addEventListener('keydown',e=>{
 /* ══ INIT ══ */
 applyCamera();
 loadLSState();
+loadShareParam();
 captureState();
 setInterval(saveLSState,30000);
 setInterval(updateMinimap,2000);
